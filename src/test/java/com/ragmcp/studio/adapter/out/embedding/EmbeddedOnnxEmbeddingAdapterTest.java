@@ -29,6 +29,19 @@ class EmbeddedOnnxEmbeddingAdapterTest {
     }
 
     @Test
+    void initializesEvenWhenThreadContextClassLoaderCannotReadAppResources() {
+        EmbeddedOnnxEmbeddingAdapter freshAdapter = new EmbeddedOnnxEmbeddingAdapter();
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try {
+            Thread.currentThread().setContextClassLoader(ClassLoader.getPlatformClassLoader());
+            float[] vector = freshAdapter.embedQuery("spring boot fat jar classloader test");
+            assertThat(vector).hasSize(384);
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    @Test
     void rejectsNullInput() {
         assertThatThrownBy(() -> adapter.embedDocument(null))
                 .isInstanceOf(IllegalArgumentException.class);

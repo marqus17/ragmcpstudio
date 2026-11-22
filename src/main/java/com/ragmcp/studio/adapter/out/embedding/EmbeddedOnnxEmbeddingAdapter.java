@@ -63,8 +63,16 @@ public class EmbeddedOnnxEmbeddingAdapter implements EmbeddingPort {
             synchronized (this) {
                 current = this.model;
                 if (current == null) {
-                    current = new E5SmallV2QuantizedEmbeddingModel();
-                    this.model = current;
+                    ClassLoader previousCl = Thread.currentThread().getContextClassLoader();
+                    try {
+                        // Ensure Spring Boot LaunchedClassLoader is used even when invoked
+                        // from JDK HttpServer virtual threads whose TCCL cannot read BOOT-INF/lib resources.
+                        Thread.currentThread().setContextClassLoader(EmbeddedOnnxEmbeddingAdapter.class.getClassLoader());
+                        current = new E5SmallV2QuantizedEmbeddingModel();
+                        this.model = current;
+                    } finally {
+                        Thread.currentThread().setContextClassLoader(previousCl);
+                    }
                 }
             }
         }
