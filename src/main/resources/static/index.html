@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG MCP Studio</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app-shell">
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-mark" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                    <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path>
+                    <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"></path>
+                </svg>
+            </div>
+            <div>
+                <h1>RAG MCP Studio</h1>
+                <p class="subtitle">Moteur RAG local 100 % autonome (ONNX) &amp; Serveur MCP &mdash; Z&eacute;ro LLM g&eacute;n&eacute;ratif</p>
+            </div>
+        </div>
+        <div class="header-actions">
+            <div id="header-mcp-badge" class="status-badge status-stopped" title="Statut du serveur MCP">
+                <span class="status-dot"></span>
+                <span id="header-mcp-badge-text">MCP Arr&ecirc;t&eacute;</span>
+            </div>
+            <button id="theme-toggle" type="button" class="btn btn-ghost btn-icon" title="Changer de th&egrave;me" aria-label="Changer de th&egrave;me">
+                <span id="theme-toggle-icon">&#9789;</span>
+            </button>
+        </div>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Navigation principale">
+        <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="panel-ingestion" id="tab-ingestion" data-tab="ingestion">
+            Vectorisation (Ingestion)
+        </button>
+        <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-mcp" id="tab-mcp" data-tab="mcp">
+            Serveur MCP &amp; Partage
+        </button>
+    </nav>
+
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <main class="main-content">
+        <!-- TAB 1: INGESTION -->
+        <section id="panel-ingestion" class="tab-panel active" role="tabpanel" aria-labelledby="tab-ingestion">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2>Configuration de la vectorisation</h2>
+                        <p class="hint">Formats pris en charge : <code>.md</code>, <code>.txt</code>, <code>.pdf</code>, <code>.java</code>, <code>.kt</code>, <code>.py</code>, <code>.ts</code>, <code>.json</code>, <code>.yml</code></p>
+                    </div>
+                </div>
+
+                <form id="ingestion-form" class="form-grid" novalidate>
+                    <div class="field field-full">
+                        <label for="ing-source-dir">Dossier source des documents</label>
+                        <div class="input-with-btn">
+                            <input id="ing-source-dir" type="text" placeholder="/chemin/vers/mes-documents" autocomplete="off" required>
+                            <button type="button" class="btn btn-secondary" data-browse-target="ing-source-dir" data-browse-mode="dir">Parcourir...</button>
+                        </div>
+                    </div>
+
+                    <div class="field field-full">
+                        <label for="ing-db-path">Fichier SQLite de sortie (.db)</label>
+                        <div class="input-with-btn">
+                            <input id="ing-db-path" type="text" placeholder="/chemin/vers/ma-base.db" autocomplete="off" required>
+                            <button type="button" class="btn btn-secondary" data-browse-target="ing-db-path" data-browse-mode="save-db">Parcourir...</button>
+                        </div>
+                    </div>
+
+                    <div class="field field-full">
+                        <label>Moteur d'embedding embarqu&eacute;</label>
+                        <p class="hint"><code>e5-small-v2-q</code> (ONNX Runtime, 384 dimensions, 100 % local et hors-ligne &mdash; aucune d&eacute;pendance externe)</p>
+                    </div>
+
+                    <div class="field">
+                        <label for="ing-chunk-size">Taille de chunk (caract&egrave;res)</label>
+                        <input id="ing-chunk-size" type="number" min="100" max="20000" step="50" value="1000" required>
+                    </div>
+
+                    <div class="field">
+                        <label for="ing-chunk-overlap">Chevauchement (overlap)</label>
+                        <input id="ing-chunk-overlap" type="number" min="0" max="10000" step="25" value="200" required>
+                    </div>
+
+                    <div class="form-actions field-full">
+                        <button id="btn-start-ingestion" type="submit" class="btn btn-primary">
+                            D&eacute;marrer la vectorisation
+                        </button>
+                        <button id="btn-cancel-ingestion" type="button" class="btn btn-danger" disabled>
+                            Annuler
+                        </button>
+                        <button id="btn-use-db-in-mcp" type="button" class="btn btn-ghost hidden">
+                            Ouvrir cette base dans l'onglet MCP &rarr;
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>Progression en temps r&eacute;el</h2>
+                    <div class="progress-header-right">
+                        <span id="sse-indicator" class="mini-badge" title="Canal de mise &agrave; jour">SSE</span>
+                        <span id="ing-state-badge" class="state-pill state-idle">EN ATTENTE</span>
+                    </div>
+                </div>
+
+                <div class="progress-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="ing-progress-wrap">
+                    <div id="ing-progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
+                </div>
+                <div class="progress-meta">
+                    <span id="ing-percent">0 %</span>
+                    <span id="ing-current-file" class="mono muted">Aucun fichier en cours</span>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <span class="stat-label">Fichiers trait&eacute;s</span>
+                        <strong id="stat-files" class="stat-value">0 / 0</strong>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">Chunks cr&eacute;&eacute;s</span>
+                        <strong id="stat-chunks" class="stat-value">0</strong>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">Dur&eacute;e</span>
+                        <strong id="stat-duration" class="stat-value">&mdash;</strong>
+                    </div>
+                </div>
+
+                <div id="ing-error-banner" class="alert alert-error hidden" role="alert"></div>
+
+                <div class="console-section">
+                    <div class="console-header">
+                        <span class="console-title">Journal d'ex&eacute;cution</span>
+                        <button id="btn-clear-log-scroll" type="button" class="btn btn-ghost btn-xs">Bas de page</button>
+                    </div>
+                    <pre id="ing-log-console" class="log-console">En attente d'une t&acirc;che de vectorisation...</pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: MCP SERVER & SHARING -->
+        <section id="panel-mcp" class="tab-panel" role="tabpanel" aria-labelledby="tab-mcp">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2>Base SQLite autonome (.db)</h2>
+                        <p class="hint">Chargez votre base locale ou un fichier <code>.db</code> partag&eacute; par un coll&egrave;gue (sans avoir besoin des documents sources).</p>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="mcp-db-path">Chemin du fichier .db</label>
+                    <div class="input-with-btn">
+                        <input id="mcp-db-path" type="text" placeholder="/chemin/vers/base-partagee.db" autocomplete="off">
+                        <button type="button" class="btn btn-secondary" data-browse-target="mcp-db-path" data-browse-mode="db">Parcourir...</button>
+                        <button id="btn-inspect-db" type="button" class="btn btn-primary">Inspecter la base</button>
+                    </div>
+                </div>
+
+                <div id="db-inspect-error" class="alert alert-error hidden" role="alert"></div>
+
+                <div id="db-metadata-card" class="metadata-panel hidden">
+                    <div class="meta-grid">
+                        <div class="meta-item">
+                            <span class="meta-label">Mod&egrave;le d'embedding</span>
+                            <strong id="meta-embed-model" class="mono">&mdash;</strong>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Dimensions</span>
+                            <strong id="meta-dimensions" class="mono">&mdash;</strong>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Documents</span>
+                            <strong id="meta-doc-count">&mdash;</strong>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Chunks</span>
+                            <strong id="meta-chunk-count">&mdash;</strong>
+                        </div>
+                        <div class="meta-item meta-wide">
+                            <span class="meta-label">Date de cr&eacute;ation</span>
+                            <strong id="meta-created-at" class="mono">&mdash;</strong>
+                        </div>
+                    </div>
+
+                    <details class="sources-details" id="db-sources-details">
+                        <summary>Sources index&eacute;es (<span id="db-sources-count">0</span>)</summary>
+                        <ul id="db-sources-list" class="sources-list"></ul>
+                    </details>
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Contr&ocirc;le du serveur MCP</h2>
+                        <span id="mcp-status-pill" class="state-pill state-idle">ARR&Ecirc;T&Eacute;</span>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="field field-full">
+                            <label for="mcp-port">Port MCP</label>
+                            <input id="mcp-port" type="number" min="1" max="65535" value="8081">
+                        </div>
+                    </div>
+
+                    <div class="endpoint-box">
+                        <span class="meta-label">Endpoint Streamable HTTP</span>
+                        <div class="endpoint-row">
+                            <code id="mcp-endpoint-url">http://localhost:8081/mcp</code>
+                            <button id="btn-copy-endpoint" type="button" class="btn btn-ghost btn-xs">Copier</button>
+                        </div>
+                        <div id="mcp-active-db-line" class="hint hidden">Base active : <code id="mcp-active-db"></code></div>
+                    </div>
+
+                    <div id="mcp-error-banner" class="alert alert-error hidden" role="alert"></div>
+
+                    <div class="form-actions">
+                        <button id="btn-mcp-start" type="button" class="btn btn-primary">D&eacute;marrer</button>
+                        <button id="btn-mcp-restart" type="button" class="btn btn-secondary">Red&eacute;marrer</button>
+                        <button id="btn-mcp-stop" type="button" class="btn btn-danger" disabled>Arr&ecirc;ter</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Configuration <code>opencode.json</code></h2>
+                            <p class="hint">Pr&ecirc;t &agrave; copier dans votre fichier de configuration OpenCode.</p>
+                        </div>
+                        <button id="btn-copy-opencode" type="button" class="btn btn-secondary btn-sm">Copier</button>
+                    </div>
+                    <pre id="opencode-snippet" class="code-block"></pre>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2>Tester la recherche</h2>
+                        <p class="hint">Recherche hybride (Cosinus + SQLite FTS5 fusionn&eacute;s par RRF) directement sur la base s&eacute;lectionn&eacute;e.</p>
+                    </div>
+                </div>
+
+                <form id="search-test-form" class="search-bar">
+                    <input id="search-query" type="text" placeholder="Posez une question ou saisissez des mots-cl&eacute;s..." autocomplete="off" required>
+                    <label class="topk-wrap" for="search-topk">
+                        <span>top_k</span>
+                        <select id="search-topk">
+                            <option value="3">3</option>
+                            <option value="5" selected>5</option>
+                            <option value="8">8</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                        </select>
+                    </label>
+                    <button id="btn-run-search" type="submit" class="btn btn-primary">Rechercher</button>
+                </form>
+
+                <div id="search-error-banner" class="alert alert-error hidden" role="alert"></div>
+                <div id="search-results-meta" class="hint hidden"></div>
+                <div id="search-results-list" class="results-list"></div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- FILESYSTEM PICKER MODAL -->
+<div id="fs-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="fs-modal-title">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="fs-modal-title">Parcourir le syst&egrave;me de fichiers</h3>
+            <button id="fs-modal-close" type="button" class="btn btn-ghost btn-icon" aria-label="Fermer">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="fs-nav-bar">
+                <button id="fs-btn-up" type="button" class="btn btn-secondary btn-sm">&uarr; Parent</button>
+                <input id="fs-current-path" type="text" class="mono" placeholder="/chemin">
+                <button id="fs-btn-go" type="button" class="btn btn-secondary btn-sm">Aller</button>
+            </div>
+            <div id="fs-modal-error" class="alert alert-error hidden" role="alert"></div>
+            <ul id="fs-entries" class="fs-list"></ul>
+            <div id="fs-save-filename-row" class="field hidden">
+                <label for="fs-save-filename">Nom du fichier .db de sortie</label>
+                <input id="fs-save-filename" type="text" value="knowledge.db" placeholder="knowledge.db">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="fs-btn-cancel" type="button" class="btn btn-ghost">Annuler</button>
+            <button id="fs-btn-select" type="button" class="btn btn-primary">S&eacute;lectionner</button>
+        </div>
+    </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
